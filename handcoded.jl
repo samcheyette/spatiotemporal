@@ -4,33 +4,35 @@ using Distributions
 using Statistics
 
 
-
 ############################################################
-#########Inference utils ###################################
+######### Inference utils ##################################
 ############################################################
 
-MAX_BRANCH_GP = 2
+MAX_BRANCH = 2
 
-function evaluate_function(func::Node, t0::Float64, x0::Float64, n::Int)
+function evaluate_function(func::Node, x0::Float64, t0::Float64, n::Int)
 
     x = x0
-    A = []
-    push!(A, x)
-    for i in 1:(n-1)
-        x = eval_node(func, x, t0+i)
-        push!(A, x)
+    A = Vector{Float64}()
+    append!(A, x)
+    for i in 2:n
+        x = eval_node(func, x, t0+i-1)
+        append!(A, x)
     end
     return A
 end
 
 """Return log likelihood given input/output values."""
 function compute_log_likelihood(func::Node, noise::Float64,
-        ts::Vector{Float64}, xs::Vector{Float64})
+       xs::Vector{Float64}, ts::Vector{Float64})
     lkhd = 0
-    for i in 2:length(ts)
-        mu = eval_node(func, xs[i-1], ts[i-1])
+    mu = eval_node(func, xs[1], ts[1])
+    mu = xs[1]
+    for i in 2:(length(ts))
+        #println(func)
+        mu = eval_node(func, mu, ts[i])
+
         lkhd = lkhd+ Distributions.logpdf(Distributions.Normal(mu, noise),xs[i])
-        #lkhd = lkhd - (mu-xs[i])^2
     end
     return lkhd
 end
@@ -75,9 +77,12 @@ function pcfg_prior()
     node_type = sample_categorical(node_dist)
 
     if node_type == NUMBER
-        param = rand(Distributions.DiscreteUniform(1,10))
+        if rand() < 1/10
+            param = π
+        else
+            param = rand(Distributions.DiscreteUniform(1,10))
+        end
         node = Number(param)
-
 
     elseif node_type == VAR_T
         node = VarT()
@@ -90,7 +95,6 @@ function pcfg_prior()
         right = pcfg_prior()
         node = Plus(left, right)
 
-
     elseif node_type == MINUS
         left = pcfg_prior()
         right = pcfg_prior()
@@ -100,6 +104,28 @@ function pcfg_prior()
         left = pcfg_prior()
         right = pcfg_prior()
         node = Times(left, right)
+
+
+    elseif node_type == DIVIDE
+        left = pcfg_prior()
+        right = pcfg_prior()
+        node = Divide(left, right)
+
+
+    elseif node_type == MOD
+        left = pcfg_prior()
+        right = pcfg_prior()
+        node = Mod(left, right)
+
+    elseif node_type == SIN
+        arg = pcfg_prior()
+        node = Sin(arg)
+
+    elseif node_type == COS
+        arg = pcfg_prior()
+        node = Cos(arg)
+
+
 
     # unknown node type
     else
@@ -129,12 +155,22 @@ function replace_subtree(func::LeafNode, cur::Int, func2::Node, cur2::Int)
 end
 
 
+function replace_subtree(func::UnaryOpNode, cur::Int, func2::Node, cur2::Int)
+    if cur == cur2
+        return func2
+    end
+    child = get_child(cur, 1, MAX_BRANCH)
+    subtree = child == cur2 ? func2 :
+        replace_subtree(func.arg, child, func2, cur2)
+    return typeof(func)(subtree)
+end
+
 function replace_subtree(func::BinaryOpNode, cur::Int, func2::Node, cur2::Int)
     if cur == cur2
         return func2
     end
-    child_l = get_child(cur, 1, MAX_BRANCH_GP)
-    child_r = get_child(cur, 2, MAX_BRANCH_GP)
+    child_l = get_child(cur, 1, MAX_BRANCH)
+    child_r = get_child(cur, 2, MAX_BRANCH)
     subtree_left = child_l == cur2 ? func2 :
         replace_subtree(func.left, child_l, func2, cur2)
     subtree_right = child_r == cur2 ? func2 :
@@ -150,9 +186,24 @@ function pick_random_node_unbiased(node::LeafNode, cur::Int, max_branch::Int)
 end
 
 
+
 # MH correction for unbiased sampling.
 function get_alpha_subtree_unbiased(func_prev, func_prop)
     return log(size(func_prev)) - log(size(func_prop))
+end
+
+
+function pick_random_node_unbiased(node::UnaryOpNode, cur::Int, max_branch::Int)
+    probs = [1, size(node.arg)] ./ size(node)
+    choice = sample_categorical(probs)
+    if choice == 1
+        return (cur, node)
+    elseif choice == 2
+        n_child = get_child(cur, 1, max_branch)
+        return pick_random_node_unbiased(node.arg, n_child, max_branch)
+    else
+        @assert false "Unexpected child node $(choice)"
+    end
 end
 
 
@@ -176,7 +227,7 @@ end
 
 
 function mh_resample_subtree_unbiased(prev_trace)
-    (loc_delta, node_delta) = pick_random_node_unbiased(prev_trace.func, 1, MAX_BRANCH_GP)
+    (loc_delta, node_delta) = pick_random_node_unbiased(prev_trace.func, 1, MAX_BRANCH)
     subtree = pcfg_prior()
     func_new = replace_subtree(prev_trace.func, 1, subtree, loc_delta)
     log_likelihood = compute_log_likelihood(func_new, prev_trace.noise,
@@ -217,10 +268,11 @@ function run_mcmc(prev_trace, iters::Int)
     for iter=1:iters
         new_trace = mh_resample_subtree_unbiased(new_trace)
        # new_trace = mh_resample_noise(new_trace)
-        if iter % 5000 == 0
+        if iter % 10000 == 0
             println(iter)
             println(new_trace.func, " ", new_trace.log_likelihood)
-            println(evaluate_function(new_trace.func, t0,x0, 10))
+            println(prev_trace.xs)
+            println(evaluate_function(new_trace.func, x0,t0, 10))
             println("")
         end
     end
@@ -228,8 +280,12 @@ function run_mcmc(prev_trace, iters::Int)
 end
 
 
-xs = [1.,4.,9.,16.,25.,36.]
+#xs = [1.,4.,9.,16.,25.,36.]
+#xs = [2.,4.,6.,8.,10.,12.]
 #xs = [-1.,0.,1.,2.,3.,4.]
-ts = [1.,2.,3.,4.,5.,6.]
+#xs = [1.,2.,3.,4.,5.,6.]
+ts = [1.,2.,3.,4.,5.,6.,7.,8.]
+xs = map(t -> t*sin(t/2), ts)
+#xs = [25.,25.,25.,25.,25.,25.,25.]
 trace = initialize_trace(xs, ts)
 run_mcmc(trace, 10000000)
