@@ -7,6 +7,8 @@ abstract type Node end
 abstract type LeafNode <: Node end
 abstract type BinaryOpNode <: Node end
 abstract type UnaryOpNode <: Node end
+#abstract type BoolOpNode <: Node end
+abstract type TrinaryOpNode <: Node end
 
 
 """
@@ -15,8 +17,11 @@ abstract type UnaryOpNode <: Node end
 Number of nodes in the subtree rooted at this node.
 """
 Base.size(::LeafNode) = 1
+Base.size(node::TrinaryOpNode) = node.size
+
 Base.size(node::BinaryOpNode) = node.size
 Base.size(node::UnaryOpNode) = node.size
+#Base.size(node::BoolOpNode) = node.size
 
 
 
@@ -139,6 +144,36 @@ end
 
 
 
+"""If-then node"""
+struct If_Then <: TrinaryOpNode
+    condition::Node
+    left::Node
+    right::Node
+    size::Int
+end
+If_Then(condition, left, right) = If_Then(condition,left,right,size(condition)+
+                        size(left)+size(right)+1)
+function eval_node(node::If_Then, x, t)
+    condition = eval_node(node.condition, x, t)
+    if condition 
+        eval_node(node.left,x,t)
+    else 
+        eval_node(node.right,x,t)
+    end
+end
+
+"""Equals node"""
+struct Equals <: BinaryOpNode
+    left::Node
+    right::Node
+    size::Int
+end
+Equals(left, right) = Equals(left, right, size(left)+size(right)+1)
+function eval_node(node::Equals, x, t)
+    return eval_node(node.left,x,t) == eval_node(node.right,x,t)
+end
+
+
 
 ################################################################
 
@@ -146,41 +181,68 @@ function normalize(dist::Vector{Float64})
     return dist/sum(dist)
 end
 
+#EXPR
+NUMBER = 1
+VAR_X = 2
+VAR_T = 3
+IF_THEN = 4
+
+PLUS = 5
+MINUS = 6
+TIMES = 7
+DIVIDE = 8
+MOD = 9
+SIN = 10
+COS = 11
+
+#BOOL
+EQUALS = 1
 
 
-const NUMBER = 1
-const VAR_X = 2
-const VAR_T = 3
-const PLUS = 4
-const MINUS = 5
-const TIMES = 6
-const DIVIDE = 7
-const MOD = 8
-const SIN = 9
-const COS = 10
-
-node_type_to_num_children = Dict(
+expr_node_type_to_num_children = Dict(
     NUMBER => 0,
     VAR_X => 0,
     VAR_T => 0,
-    PLUS => 2,
-    MINUS => 2,
-    TIMES => 2,
-    DIVIDE => 2,
-    MOD => 2, 
-    SIN => 1,
-    COS => 1)
+   PLUS => 2,
+   MINUS => 2,
+   TIMES => 2,
+   DIVIDE => 2,
+   MOD => 1, 
+   SIN => 1,
+   COS => 1,
+    IF_THEN => 3)
 
+bool_node_type_to_num_children = Dict(
+        EQUALS => 2)
+    
 
-node_dist = Vector{Float64}()
-for key in sort(collect(keys(node_type_to_num_children)))
-    n_children = node_type_to_num_children[key]
-    append!(node_dist, 2.0^-n_children)
+node_dists = Dict{String, Vector{Float64}}();
+node_types = Dict{String, String}();
+for key in sort(collect(keys(expr_node_type_to_num_children)))
+    n_children = expr_node_type_to_num_children[key]
+    if !("EXPR" in keys(node_dists))
+        node_dists["EXPR"] = Vector{Float64}()
+    end
+    append!(node_dists["EXPR"], 2.0^-n_children)
 end
 
-node_dist = normalize(node_dist)
+for key in sort(collect(keys(bool_node_type_to_num_children)))
+    n_children = bool_node_type_to_num_children[key]
+    if !("BOOL" in keys(node_dists))
+        node_dists["BOOL"] = Vector{Float64}()
+    end
+    append!(node_dists["BOOL"], 2.0^-n_children)
+end
 
-const MAX_BRANCH = 2
+
+for key in keys(node_dists)
+    node_dists[key] = normalize(node_dists[key])
+end
+
+println(node_dists)
+
+
+
 
 #################################################################
 
