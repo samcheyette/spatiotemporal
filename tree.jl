@@ -199,7 +199,7 @@ COS = 11
 EQUALS = 1
 
 
-expr_node_type_to_num_children = Dict(
+EXPRS = Dict(
     NUMBER => 0,
     VAR_X => 0,
     VAR_T => 0,
@@ -212,27 +212,39 @@ expr_node_type_to_num_children = Dict(
    COS => 1,
     IF_THEN => 3)
 
-bool_node_type_to_num_children = Dict(
+BOOLS = Dict(
         EQUALS => 2)
-    
+
+node_type_to_num_children = Dict(
+            "EXPR" => EXPRS,
+            "BOOL" => BOOLS)
 
 node_dists = Dict{String, Vector{Float64}}();
-node_types = Dict{String, String}();
-for key in sort(collect(keys(expr_node_type_to_num_children)))
-    n_children = expr_node_type_to_num_children[key]
-    if !("EXPR" in keys(node_dists))
-        node_dists["EXPR"] = Vector{Float64}()
-    end
-    append!(node_dists["EXPR"], 2.0^-n_children)
-end
+#node_types = Dict{String, String}();
+for key in node_type_to_num_children
+    rules = node_type_to_num_children[key]
+    node_dists[key] = Vector{Float64}()
+    for rule_name in sort(collect(keys(rules[key])))
+        n_children = rules[rule_name]
+        append!(node_dists[key],2.0^-n_children)
+    
 
-for key in sort(collect(keys(bool_node_type_to_num_children)))
-    n_children = bool_node_type_to_num_children[key]
-    if !("BOOL" in keys(node_dists))
-        node_dists["BOOL"] = Vector{Float64}()
-    end
-    append!(node_dists["BOOL"], 2.0^-n_children)
 end
+# for key in sort(collect(keys(expr_node_type_to_num_children)))
+#     n_children = expr_node_type_to_num_children[key]
+#     if !("EXPR" in keys(node_dists))
+#         node_dists["EXPR"] = Vector{Float64}()
+#     end
+#     append!(node_dists["EXPR"], 2.0^-n_children)
+# end
+
+# for key in sort(collect(keys(bool_node_type_to_num_children)))
+#     n_children = bool_node_type_to_num_children[key]
+#     if !("BOOL" in keys(node_dists))
+#         node_dists["BOOL"] = Vector{Float64}()
+#     end
+#     append!(node_dists["BOOL"], 2.0^-n_children)
+# end
 
 
 for key in keys(node_dists)
