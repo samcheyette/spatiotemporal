@@ -25,7 +25,7 @@ end
 """Return log likelihood given input/output values."""
 function compute_log_likelihood(func::Node, noise::Float64,
        xs::Vector{Float64}, ts::Vector{Float64})
-    mu = eval_node(func, xs[1], ts[1])
+    #mu = eval_node(func, xs[1], ts[1])
     mu = xs[1]
     lkhd =  Distributions.logpdf(Distributions.Normal(mu, noise),xs[1])
     for i in 2:(length(ts))
