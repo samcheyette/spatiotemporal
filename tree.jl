@@ -1,6 +1,8 @@
-import LinearAlgebra
 import Random
+using Distributions
 using Gen
+include("utils.jl")
+
 
 """Node in a tree representing a covariance function"""
 abstract type Node end
@@ -9,6 +11,7 @@ abstract type BinaryOpNode <: Node end
 abstract type UnaryOpNode <: Node end
 #abstract type BoolOpNode <: Node end
 abstract type TrinaryOpNode <: Node end
+
 
 
 """
@@ -41,6 +44,7 @@ eval_node(node::VarT, x, t) = t;
 """Variables and numbers"""
 struct VarX <: LeafNode end
 eval_node(node::VarX, x, t) = x;
+
 
 
 """Plus node"""
@@ -142,8 +146,6 @@ function eval_node(node::Cos, x, t)
     end
 end
 
-
-
 """If-then node"""
 struct If_Then <: TrinaryOpNode
     condition::Node
@@ -174,46 +176,66 @@ function eval_node(node::Equals, x, t)
 end
 
 
+"""Equals node"""
+struct Greater <: BinaryOpNode
+    left::Node
+    right::Node
+    size::Int
+end
+Greater(left, right) = Greater(left, right, size(left)+size(right)+1)
+function eval_node(node::Greater, x, t)
+    return eval_node(node.left,x,t) > eval_node(node.right,x,t)
+end
 
 ################################################################
 
-function normalize(dist::Vector{Float64})
-    return dist/sum(dist)
-end
 
 #EXPR
 NUMBER = 1
 VAR_X = 2
 VAR_T = 3
-IF_THEN = 4
 
-PLUS = 5
-MINUS = 6
-TIMES = 7
-DIVIDE = 8
-MOD = 9
-SIN = 10
-COS = 11
+PLUS = 4
+MINUS = 5
+TIMES = 6
+DIVIDE = 7
+MOD = 8
+SIN = 9
+COS = 10
+IF_THEN = 11
 
 #BOOL
 EQUALS = 1
+GT = 2
+
+BOOLS_LIST = [Equals, Greater]
 
 
 EXPRS = Dict(
     NUMBER => 0,
     VAR_X => 0,
     VAR_T => 0,
-   PLUS => 2,
-   MINUS => 2,
-   TIMES => 2,
-   DIVIDE => 2,
-   MOD => 1, 
-   SIN => 1,
-   COS => 1,
+    PLUS => 2,
+    MINUS => 2,
+    TIMES => 2,
+    DIVIDE => 2,
+    MOD => 1,
+    SIN => 1,
+     COS => 1,
     IF_THEN => 3)
 
 BOOLS = Dict(
-        EQUALS => 2)
+    EQUALS => 2,
+    GT => 2)
+
+# EXPRS = Dict(NUMBER => 0,
+#              VAR_T => 0,
+#              PLUS => 2,
+#              MINUS => 2,
+#              TIMES => 2
+#                 )
+
+# BOOLS = Dict()
 
 node_type_to_num_children = Dict(
             "EXPR" => EXPRS,
@@ -221,38 +243,21 @@ node_type_to_num_children = Dict(
 
 node_dists = Dict{String, Vector{Float64}}();
 #node_types = Dict{String, String}();
-for key in node_type_to_num_children
+for key in keys(node_type_to_num_children)
     rules = node_type_to_num_children[key]
     node_dists[key] = Vector{Float64}()
-    for rule_name in sort(collect(keys(rules[key])))
+    for rule_name in sort(collect(keys(rules)))
         n_children = rules[rule_name]
-        append!(node_dists[key],2.0^-n_children)
-    
+        append!(node_dists[key],4.0^-n_children)
+    end
 
 end
-# for key in sort(collect(keys(expr_node_type_to_num_children)))
-#     n_children = expr_node_type_to_num_children[key]
-#     if !("EXPR" in keys(node_dists))
-#         node_dists["EXPR"] = Vector{Float64}()
-#     end
-#     append!(node_dists["EXPR"], 2.0^-n_children)
-# end
-
-# for key in sort(collect(keys(bool_node_type_to_num_children)))
-#     n_children = bool_node_type_to_num_children[key]
-#     if !("BOOL" in keys(node_dists))
-#         node_dists["BOOL"] = Vector{Float64}()
-#     end
-#     append!(node_dists["BOOL"], 2.0^-n_children)
-# end
-
 
 for key in keys(node_dists)
     node_dists[key] = normalize(node_dists[key])
 end
 
 println(node_dists)
-
 
 
 

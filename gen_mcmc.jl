@@ -256,7 +256,9 @@ function run_mcmc(trace, xs, iters::Int)
             println(round_all(xs))
             println(round_all(xs_model))
             println("")
-            gui(scatter!(1:length(xs), xs_model, c="red",alpha=0.25, label=nothing))
+            if iter > 15000
+                gui(scatter!(1:length(xs), xs_model, c="red",alpha=0.25, label=nothing))
+            end
 
             #println(trace[:likelihood])
         end
@@ -284,14 +286,14 @@ end
 ts = [1.,2.,3.,4.,5.,6.,7.,8.,9.,10.]
 #xs = map(t -> t+t*sin(t*π/4), ts)
 #xs = map(t -> 1+ sin(pi*t/4), ts)
-#xs = map(t -> 10+t*sin(t/4),ts)
-xs = map(t -> t *mod(t,2),ts)
+xs = map(t -> 1+t*sin(t/4),ts)
+#xs = map(t -> t *mod(t,2),ts)
 #xs = map(t -> 1.,ts)
 
 #xs = [25.,25.,25.,25.,25.,25.,25.]
 trace = initialize_trace(xs)
 
-trace = run_mcmc(trace,xs, 100000)
+trace = run_mcmc(trace,xs, 1000000)
 
 # for i in 1:100
 #     pred = predict_new_data(model, trace, xs, [])
