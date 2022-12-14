@@ -115,8 +115,8 @@ end
     noise = 0.1
     A=Vector{Float64}()
     x_model = xs[1]
-
-    for t in 1:n
+    ({(:x,1)} ~ normal(x_model,noise))
+    for t in 2:n
         x_model = eval_node(func,x_model,t) 
         ({(:x,t)} ~ normal(x_model,noise))
     end
@@ -129,7 +129,8 @@ end
 
 @gen function random_node_path_unbiased(node::Node)
     p_stop = isa(node, LeafNode) ? 1.0 : 1/size(node)
-    if @trace(bernoulli(p_stop), :stop)
+    t = @trace(bernoulli(p_stop), :stop)
+    if t
         return :tree
 
     else
@@ -142,7 +143,8 @@ end
             (next_node, direction) = (node.arg, :arg)
 
         elseif isa(node, BinaryOpNode)
-            p_left = size(node.left) / (size(node) - 1)
+  
+              p_left = size(node.left) / (size(node) - 1)
             (next_node, direction) = @trace(bernoulli(p_left), :dir) ? (node.left, :left) : (node.right, :right)
         elseif isa(node, TrinaryOpNode)
             probs = [size(node.condition), size(node.left), size(node.right)] ./ (size(node)-1)
@@ -241,22 +243,34 @@ function subtree_involution(trace, fwd_assmt::ChoiceMap, path_to_subtree, propos
     (new_trace, bwd_assmt, weight)
 end
 
-function run_mcmc(trace, xs, iters::Int)
+function run_mcmc(trace, xs, iters::Int; visualize=false)
     xmin=minimum(xs)
     xmax=maximum(xs)
     diff = xmax-xmin+1
-    fig = plot(1:length(xs), xs, color="black", ylim=(xmin-diff,xmax+diff))
-    gui(fig)
+    D = Dict("iter"=> [],"posterior"=> [], "time"=>[])
+
+    if visualize
+        fig = plot(1:length(xs), xs, color="black", ylim=(xmin-diff,xmax+diff))
+        gui(fig)
+    end
     for iter=1:iters
-        (trace, _) = mh(trace, regen_random_subtree, (), subtree_involution)
+        dt = @elapsed begin
+            (trace, _) = mh(trace, regen_random_subtree, (), subtree_involution)
+        end
+
+        append!(D["iter"], iter)
+        append!(D["posterior"], get_score(trace))
+        append!(D["time"], dt)
+
         if iter % 2500 == 0
             xs_model = evaluate_function(get_retval(trace), xs[1], 1., length(xs)+5)
+
             println(iter)
             println(trace[:tree])
             println(round_all(xs))
             println(round_all(xs_model))
             println("")
-            if iter > 15000
+            if (visualize) && (iter > 15000)
                 gui(scatter!(fig,1:length(xs)+5, xs_model,
                  c="red",alpha=0.25, label=nothing))
             end
@@ -266,7 +280,7 @@ function run_mcmc(trace, xs, iters::Int)
 
         #(trace, _) = mh(trace, select(:noise))
     end
-    return trace
+    return D
 end
 
 # Initialize trace and extract variables.
@@ -288,7 +302,7 @@ ts = [1.,2.,3.,4.,5.,6.,7.,8.,9.,10.]
 #xs = map(t -> t+t*sin(t*π/4), ts)
 #xs = map(t -> 1+ sin(pi*t/4), ts)
 #xs = map(t -> 1+t*sin(t/4),ts)
-xs = map(t -> t * ((mod(t,3)==1)),ts)
+xs = map(t -> t * mod(t, 2),ts)
 #xs = map(t -> t*2, ts)
 #xs = map(t -> 1.,ts)
 
@@ -296,12 +310,14 @@ xs = map(t -> t * ((mod(t,3)==1)),ts)
 #xs = [25.,25.,25.,25.,25.,25.,25.]
 trace = initialize_trace(xs)
 
-trace = run_mcmc(trace,xs, 1000000)
+trace_dict = run_mcmc(trace,xs, 100000; visualize=true)
 
-# for i in 1:100
-#     pred = predict_new_data(model, trace, xs, [])
-#     println(pred)
-# end
-# println("done...")
-# println(trace[:tree])
-# render_trace(trace)
+#println(trace)
+
+using CSV
+using DataFrames
+
+df = DataFrame(trace_dict)
+
+
+CSV.write("output/gen_mcmc_time.csv", df )

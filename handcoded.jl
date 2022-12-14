@@ -357,8 +357,23 @@ function run_mcmc(prev_trace, iters::Int)
 
     x0 = prev_trace.xs[1]
     t0 = prev_trace.ts[1]
+
+    D = Dict("iter"=> [],"posterior"=> [], "time"=>[])
+
     for iter=1:iters
         new_trace = mh_resample_subtree_unbiased(new_trace)
+        dt = @elapsed begin
+            new_trace = mh_resample_subtree_unbiased(new_trace)
+        end
+
+
+        ll = new_trace.log_likelihood
+        prior = -size(new_trace.func)
+        posterior = prior + ll
+        append!(D["iter"], iter)
+        append!(D["posterior"], posterior)
+        append!(D["time"], dt)
+
        # new_trace = mh_resample_noise(new_trace)
         if iter % 10000 == 0
             println(iter)
@@ -369,7 +384,7 @@ function run_mcmc(prev_trace, iters::Int)
             println("")
         end
     end
-    return new_trace
+    return D
 end
 
 
@@ -377,13 +392,23 @@ end
 #xs = [2.,4.,6.,8.,10.,12.]
 #xs = [-1.,0.,1.,2.,3.,4.]
 #xs = [1.,2.,3.,4.,5.,6.]
-ts = [1.,2.,3.,4.,5.,6.,7.,8.]
+ts = [1.,2.,3.,4.,5.,6.,7.,8.,9.,10.]
 #xs = map(t -> t+t*sin(t*π/4), ts)
-xs = map(t -> 1+ sin(pi*t/4), ts)
+#xs = map(t -> 1+ sin(pi*t/4), ts)
+xs = map(t -> t * mod(t, 2),ts)
 
 #xs = [25.,25.,25.,25.,25.,25.,25.]
 trace = initialize_trace(xs, ts)
-run_mcmc(trace, 10000000)
+trace_dict = run_mcmc(trace, 1000000)
+
+
+using CSV
+using DataFrames
+
+df = DataFrame(trace_dict)
+
+
+CSV.write("output/handcoded_mcmc_time.csv", df )
 #=
 for i in 1:10000
     hyp = pcfg_prior()
