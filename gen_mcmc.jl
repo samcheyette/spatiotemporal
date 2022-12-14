@@ -250,14 +250,15 @@ function run_mcmc(trace, xs, iters::Int)
     for iter=1:iters
         (trace, _) = mh(trace, regen_random_subtree, (), subtree_involution)
         if iter % 2500 == 0
-            xs_model = evaluate_function(get_retval(trace), xs[1], 1., length(xs))
+            xs_model = evaluate_function(get_retval(trace), xs[1], 1., length(xs)+5)
             println(iter)
             println(trace[:tree])
             println(round_all(xs))
             println(round_all(xs_model))
             println("")
             if iter > 15000
-                gui(scatter!(1:length(xs), xs_model, c="red",alpha=0.25, label=nothing))
+                gui(scatter!(fig,1:length(xs)+5, xs_model,
+                 c="red",alpha=0.25, label=nothing))
             end
 
             #println(trace[:likelihood])
@@ -286,9 +287,11 @@ end
 ts = [1.,2.,3.,4.,5.,6.,7.,8.,9.,10.]
 #xs = map(t -> t+t*sin(t*π/4), ts)
 #xs = map(t -> 1+ sin(pi*t/4), ts)
-xs = map(t -> 1+t*sin(t/4),ts)
-#xs = map(t -> t *mod(t,2),ts)
+#xs = map(t -> 1+t*sin(t/4),ts)
+xs = map(t -> t * ((mod(t,3)==1)),ts)
+#xs = map(t -> t*2, ts)
 #xs = map(t -> 1.,ts)
+
 
 #xs = [25.,25.,25.,25.,25.,25.,25.]
 trace = initialize_trace(xs)

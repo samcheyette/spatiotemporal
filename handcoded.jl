@@ -10,11 +10,6 @@ using Statistics
 
 MAX_BRANCH = 3
 
-function round_all(xs::Vector{Float64}; n=2)
-    map(x -> round(x; digits=n), xs)
-end
-
-
 function evaluate_function(func::Node, x0::Float64, t0::Float64, n::Int)
 
     x = x0
@@ -34,9 +29,7 @@ function compute_log_likelihood(func::Node, noise::Float64,
     mu = eval_node(func, xs[1], ts[1])
     mu = xs[1]
     for i in 2:(length(ts))
-        #println(func)
         mu = eval_node(func, mu, ts[i])
-
         lkhd = lkhd+ Distributions.logpdf(Distributions.Normal(mu, noise),xs[i])
     end
     return lkhd
@@ -45,14 +38,7 @@ end
 
 
 
-"""Sample a categorical variable with given weights."""
-function sample_categorical(probs::Vector{Float64})
-    u = rand()
-    cdf = cumsum(probs)
-    for (i, c) in enumerate(cdf)
-        if u < c return i end
-    end
-end
+
 
 
 """Return index of child node in a tree."""
@@ -78,19 +64,28 @@ struct Trace
 end
 
 
+function real_prior(node_delta::Number)
+    new_value= rand(Distributions.Normal(node_delta.param,1))
+    return Number(new_value)
 
-function pcfg_prior(which_dist="EXPR")
+end
+
+
+
+function pcfg_prior(which_dist="EXPR", mean_value=0, sd_value=10)
     node_dist = node_dists[which_dist]
     node_type = sample_categorical(node_dist)
 
     if which_dist == "EXPR"
 
         if node_type == NUMBER
-            if rand() < 1/10
-                param = π
-            else
-                param = rand(Distributions.DiscreteUniform(1,10))
-            end
+            # if rand() < 1/2
+            #     param = π
+            # else
+            #     #param = rand(Distributions.DiscreteUniform(1,10))
+            #     param = 1
+            # end
+            param = rand(Distributions.Normal(mean_value,sd_value))
             node = Number(param)
 
         elseif node_type == VAR_T
@@ -149,6 +144,10 @@ function pcfg_prior(which_dist="EXPR")
             left = pcfg_prior()
             right = pcfg_prior()
             node = Equals(left, right)
+        elseif node_type == GT
+            left = pcfg_prior()
+            right = pcfg_prior()
+            node = Greater(left, right)
         # unknown node type
         else
             error("Unknown node type: $node_type")
@@ -157,8 +156,6 @@ function pcfg_prior(which_dist="EXPR")
     else 
         error("Unknown rule type: $which_dist")
     end
-
-
 
     return node
 end
@@ -173,6 +170,8 @@ end
 
 function replace_subtree(func::LeafNode, cur::Int, func2::Node, cur2::Int)
     #println("Leaf", " ", cur, " ", cur2)
+    if typeof(func) == Number
+    end
     return cur == cur2 ? func2 : func
 end
 
@@ -217,6 +216,7 @@ function replace_subtree(func::TrinaryOpNode, cur::Int, func2::Node, cur2::Int)
     child_l = get_child(cur, 2, MAX_BRANCH)
     child_r = get_child(cur, 3, MAX_BRANCH)
     #println("Trinary", " ",  child_c, " ", child_l, " ", child_r)
+
 
     subtree_cond = child_c == cur2 ? func2 :
         replace_subtree(func.condition, child_c, func2, cur2)
@@ -308,23 +308,18 @@ end
 
 function mh_resample_subtree_unbiased(prev_trace)
     (loc_delta, node_delta) = pick_random_node_unbiased(prev_trace.func, MAX_BRANCH-1, MAX_BRANCH)
-    
-    #println(typeof(node_delta), " ", typeof(node_delta) == Equals)
-    if (typeof(node_delta) == Equals) 
+    #println(loc_delta, " ", node_delta, " ", typeof(node_delta))
+    if (typeof(node_delta) in BOOLS_LIST) 
         subtree = pcfg_prior("BOOL")
+    #elseif ((rand() < 0.5) && (typeof(node_delta) == Number))
+       # subtree = real_prior(node_delta)
+    elseif typeof(node_delta)==Number
+        subtree = pcfg_prior("EXPR", node_delta.param)
     else 
         subtree = pcfg_prior("EXPR")
     end
-    #subtree = pcfg_prior()
-    #func_new = replace_subtree(prev_trace.func, loc_delta, subtree, 1)
-    #println(loc_delta, " ", node_delta)
-
     func_new = replace_subtree(prev_trace.func, MAX_BRANCH-1, subtree,
                                          loc_delta)
-    #println(prev_trace.func)
-    #println(func_new)
-    #println()  
-
     log_likelihood = compute_log_likelihood(func_new, prev_trace.noise,
         prev_trace.xs, prev_trace.ts)
     new_trace = Trace(func_new, prev_trace.noise, prev_trace.xs,
@@ -349,6 +344,7 @@ end
 
 function initialize_trace(xs::Vector{Float64}, ts::Vector{Float64})
     func::Node = pcfg_prior()
+    #func = pcfg_prior()
     noise = 0.1
     log_likelihood = compute_log_likelihood(func, noise, xs, ts)
     return Trace(func, noise, xs, ts, log_likelihood)
@@ -382,7 +378,10 @@ end
 #xs = [-1.,0.,1.,2.,3.,4.]
 #xs = [1.,2.,3.,4.,5.,6.]
 ts = [1.,2.,3.,4.,5.,6.,7.,8.]
-xs = map(t -> t+t*sin(t*π/4), ts)
+#xs = map(t -> t+t*sin(t*π/4), ts)
+xs = map(t -> 1+ sin(pi*t/4), ts)
+
+#xs = [25.,25.,25.,25.,25.,25.,25.]
 trace = initialize_trace(xs, ts)
 run_mcmc(trace, 10000000)
 #=
