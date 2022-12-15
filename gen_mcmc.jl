@@ -113,7 +113,7 @@ end
     p_stop = isa(node, LeafNode) ? 1.0 : 1/size(node)
     t = @trace(bernoulli(p_stop), :stop)
     if t
-        return :tree
+        return (:tree, node)
     else
         if isa(node, UnaryOpNode)
             (next_node, direction) = (node.arg, :arg)
@@ -138,53 +138,23 @@ end
             error("Unknown node type: $node_type")
         end
 
-        rest_of_path = @trace(random_node_path_unbiased(next_node), :rest_of_path)
+        (rest_of_path, final_node) = {:rest_of_path} ~ random_node_path_unbiased(next_node)
 
         if isa(rest_of_path, Pair)
-            return :tree => direction => rest_of_path[2]
+            return (:tree => direction => rest_of_path[2], final_node)
         else
-            return :tree => direction
+            return (:tree => direction, final_node)
         end
     end
 end
 
 
 @gen function random_node_path_root(node::Node)
-    return :tree
-end
-
-function get_value_at_path(tree, path)
-    if !(isa(path, Pair))
-        return tree
-    else
-        if isa(path[2], Pair)
-            choice = path[2][1]
-        else
-            choice = path[2]
-        end
-        if isa(tree, UnaryOpNode)
-            return get_value_at_path(tree.arg, path[2])
-        elseif isa(tree, BinaryOpNode)
-            if choice == :left
-                return get_value_at_path(tree.left, path[2])
-            else
-                return get_value_at_path(tree.right, path[2])
-            end
-        else
-            if choice == :condition
-                return get_value_at_path(tree.condition, path[2])
-            elseif choice == :left
-                return get_value_at_path(tree.left, path[2])
-            else
-                return get_value_at_path(tree.right, path[2])
-            end
-        end
-    end
+    return (:tree, node)
 end
 
 @gen function regen_random_subtree(prev_trace)
-    path = @trace(random_node_path_unbiased(get_retval(prev_trace)), :path)
-    change_node = get_value_at_path(get_retval(prev_trace), path)
+    (path, change_node) = @trace(random_node_path_unbiased(get_retval(prev_trace)), :path)
     if (typeof(change_node) in BOOLS_LIST)
         @trace(pcfg_prior("BOOL"), :new_subtree)
     elseif isa(change_node, Number)
