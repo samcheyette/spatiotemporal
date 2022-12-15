@@ -1,8 +1,9 @@
 import Random
 using Distributions
-using Gen
-include("utils.jl")
 
+using Gen
+
+include("utils.jl")
 
 """Node in a tree representing a covariance function"""
 abstract type Node end
@@ -11,8 +12,6 @@ abstract type BinaryOpNode <: Node end
 abstract type UnaryOpNode <: Node end
 #abstract type BoolOpNode <: Node end
 abstract type TrinaryOpNode <: Node end
-
-
 
 """
     size(::Node)
@@ -126,7 +125,7 @@ function eval_node(node::Sin, x, t)
     arg = eval_node(node.arg, x, t)
     if abs(arg) == Inf
         return Inf
-    else 
+    else
         return sin(arg)
     end
 end
@@ -141,7 +140,7 @@ function eval_node(node::Cos, x, t)
     arg = eval_node(node.arg, x, t)
     if abs(arg) == Inf
         return Inf
-    else 
+    else
         return cos(arg)
     end
 end
@@ -157,9 +156,9 @@ If_Then(condition, left, right) = If_Then(condition,left,right,size(condition)+
                         size(left)+size(right)+1)
 function eval_node(node::If_Then, x, t)
     condition = eval_node(node.condition, x, t)
-    if condition 
+    if condition
         eval_node(node.left,x,t)
-    else 
+    else
         eval_node(node.right,x,t)
     end
 end
@@ -189,7 +188,6 @@ end
 
 ################################################################
 
-
 #EXPR
 NUMBER = 1
 VAR_X = 2
@@ -210,32 +208,22 @@ GT = 2
 
 BOOLS_LIST = [Equals, Greater]
 
-
 EXPRS = Dict(
-    NUMBER => 0,
-    VAR_X => 0,
-    VAR_T => 0,
-    PLUS => 2,
-    MINUS => 2,
-    TIMES => 2,
-    DIVIDE => 2,
-    MOD => 1,
-    SIN => 1,
-     COS => 1,
+    NUMBER  => 0,
+    VAR_X   => 0,
+    VAR_T   => 0,
+    PLUS    => 2,
+    MINUS   => 2,
+    TIMES   => 2,
+    DIVIDE  => 2,
+    MOD     => 1,
+    SIN     => 1,
+     COS    => 1,
     IF_THEN => 3)
 
 BOOLS = Dict(
-    EQUALS => 2,
-    GT => 2)
-
-# EXPRS = Dict(NUMBER => 0,
-#              VAR_T => 0,
-#              PLUS => 2,
-#              MINUS => 2,
-#              TIMES => 2
-#                 )
-
-# BOOLS = Dict()
+    EQUALS  => 2,
+    GT      => 2)
 
 node_type_to_num_children = Dict(
             "EXPR" => EXPRS,
@@ -258,8 +246,3 @@ for key in keys(node_dists)
 end
 
 println(node_dists)
-
-
-
-#################################################################
-
