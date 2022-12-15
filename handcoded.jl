@@ -10,27 +10,25 @@ using Statistics
 
 MAX_BRANCH = 3
 
-function evaluate_function(func::Node, x0::Float64, t0::Float64, n::Int)
-
-    x = x0
+function evaluate_function(func::Node, t0::Integer, x0::Float64, n::Integer)
     A = Vector{Float64}()
+    x = x0
     append!(A, x)
-    for i in 2:n
-        x = eval_node(func, x, t0+i-1)
+    for t in 1:n
+        x = eval_node(func, x, t0+t)
         append!(A, x)
     end
     return A
 end
 
 """Return log likelihood given input/output values."""
-function compute_log_likelihood(func::Node, noise::Float64,
-       xs::Vector{Float64}, ts::Vector{Float64})
+function compute_log_likelihood(func::Node, noise::Float64, t0::Integer, x0::Float64, xs::Vector{Float64})
+    n = length(xs)
     lkhd = 0
-    mu = eval_node(func, xs[1], ts[1])
-    mu = xs[1]
-    for i in 2:(length(ts))
-        mu = eval_node(func, mu, ts[i])
-        lkhd = lkhd+ Distributions.logpdf(Distributions.Normal(mu, noise),xs[i])
+    x = x0
+    for t in 1:n
+        x = eval_node(func, x, t0+t)
+        lkhd = lkhd + Distributions.logpdf(Distributions.Normal(x, noise), xs[t])
     end
     return lkhd
 end
@@ -58,8 +56,9 @@ end
 struct Trace
     func::Node
     noise::Float64
+    t0::Integer
+    x0::Float64
     xs::Vector{Float64}
-    ts::Vector{Float64}
     log_likelihood::Float64
 end
 
@@ -321,9 +320,9 @@ function mh_resample_subtree_unbiased(prev_trace)
     func_new = replace_subtree(prev_trace.func, MAX_BRANCH-1, subtree,
                                          loc_delta)
     log_likelihood = compute_log_likelihood(func_new, prev_trace.noise,
-        prev_trace.xs, prev_trace.ts)
-    new_trace = Trace(func_new, prev_trace.noise, prev_trace.xs,
-        prev_trace.ts, log_likelihood)
+        prev_trace.t0, prev_trace.x0, prev_trace.xs)
+    new_trace = Trace(func_new, prev_trace.noise,
+        prev_trace.t0, prev_trace.x0, prev_trace.xs, log_likelihood)
     alpha_size = get_alpha_subtree_unbiased(node_delta, subtree)
     alpha_ll = new_trace.log_likelihood - prev_trace.log_likelihood
     alpha = alpha_ll + alpha_size
@@ -333,30 +332,26 @@ end
 function mh_resample_subtree_root(prev_trace)
     func_new = pcfg_prior()
     log_likelihood = compute_log_likelihood(func_new, prev_trace.noise,
-        prev_trace.xs, prev_trace.ts)
-    new_trace = Trace(func_new, prev_trace.noise, prev_trace.xs,
-        prev_trace.ts, log_likelihood)
+        prev_trace.t0, prev_trace.x0, prev_trace.xs)
+    new_trace = Trace(func_new, prev_trace.noise, prev_trace.t0,
+        prev_trace.x0, prev_trace.xs, log_likelihood)
     alpha = new_trace.log_likelihood - prev_trace.log_likelihood
     return log(rand()) < alpha ? new_trace : prev_trace
 end
 
 
 
-function initialize_trace(xs::Vector{Float64}, ts::Vector{Float64})
+function initialize_trace(t0::Integer, x0::Float64, xs::Vector{Float64})
     func::Node = pcfg_prior()
-    #func = pcfg_prior()
     noise = 0.1
-    log_likelihood = compute_log_likelihood(func, noise, xs, ts)
-    return Trace(func, noise, xs, ts, log_likelihood)
+    log_likelihood = compute_log_likelihood(func, noise, t0, x0, xs)
+    return Trace(func, noise, t0, x0, xs, log_likelihood)
 end
 
 
 
 function run_mcmc(prev_trace, iters::Int)
     new_trace = prev_trace
-
-    x0 = prev_trace.xs[1]
-    t0 = prev_trace.ts[1]
     for iter=1:iters
         new_trace = mh_resample_subtree_unbiased(new_trace)
        # new_trace = mh_resample_noise(new_trace)
@@ -364,8 +359,9 @@ function run_mcmc(prev_trace, iters::Int)
             println(iter)
             println(new_trace.func, " ", new_trace.log_likelihood)
             println(round_all(prev_trace.xs))
-            println(round_all(evaluate_function(new_trace.func, x0,t0,
-                         length(prev_trace.xs))))
+            xs_model = evaluate_function(new_trace.func, new_trace.t0, new_trace.x0, length(new_trace.xs))
+            @assert length(xs_model) == 1 + length(new_trace.xs)
+            println(round_all(xs_model))
             println("")
         end
     end
@@ -377,13 +373,16 @@ end
 #xs = [2.,4.,6.,8.,10.,12.]
 #xs = [-1.,0.,1.,2.,3.,4.]
 #xs = [1.,2.,3.,4.,5.,6.]
-ts = [1.,2.,3.,4.,5.,6.,7.,8.]
+ts = 0:10
 #xs = map(t -> t+t*sin(t*π/4), ts)
 xs = map(t -> 1+ sin(pi*t/4), ts)
 
 #xs = [25.,25.,25.,25.,25.,25.,25.]
-trace = initialize_trace(xs, ts)
-run_mcmc(trace, 10000000)
+t0 = ts[1]
+x0 = xs[1]
+xs_obs = xs[2:end]
+trace = initialize_trace(ts[1], xs[1], xs[2:end])
+run_mcmc(trace, 10000)
 #=
 for i in 1:10000
     hyp = pcfg_prior()

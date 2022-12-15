@@ -6,14 +6,13 @@ using Plots
 
 
 
-function evaluate_function(func::Node, x0::Float64, t0::Float64, n::Int; noise=0.1)
-
-    x = x0
+function evaluate_function(func::Node, t0::Integer, x0::Float64, n::Integer; noise=0.1)
     A = Vector{Float64}()
+    x = x0
     append!(A, normal(x, noise))
-    for i in 2:n
-        x = eval_node(func, x, t0+i-1)
-        append!(A, normal(x,noise))
+    for t in 1:n
+        x = eval_node(func, x, t0+t)
+        append!(A, normal(x, noise))
     end
     return A
 end
@@ -107,18 +106,14 @@ end
 
 
 
-@gen function model(xs::Vector{Float64})
+@gen function model(t0::Integer, x0::Float64, n::Integer)
     n = length(xs)
-
     func::Node = @trace(pcfg_prior(), :tree)
-    #noise = @trace(0.1, :noise)
     noise = 0.1
-    A=Vector{Float64}()
-    x_model = xs[1]
-
+    x = x0
     for t in 1:n
-        x_model = eval_node(func,x_model,t) 
-        ({(:x,t)} ~ normal(x_model,noise))
+        x = eval_node(func, x, t0+t)
+        ({(:x, t0+t)} ~ normal(x, noise))
     end
     return func
 end
@@ -245,20 +240,30 @@ function run_mcmc(trace, xs, iters::Int)
     xmin=minimum(xs)
     xmax=maximum(xs)
     diff = xmax-xmin+1
-    fig = plot(1:length(xs), xs, color="black", ylim=(xmin-diff,xmax+diff))
+    (t0, x0, n) = get_args(trace)
+    println(t0)
+    println(x0)
+    println(n)
+    ts_plot = collect(t0:t0+n)
+    xs_plot = vcat(x0, xs)
+    println(length(ts_plot))
+    println(length(xs_plot))
+    fig = plot(ts_plot, xs_plot, color="black", ylim=(xmin-diff,xmax+diff))
     gui(fig)
     for iter=1:iters
         (trace, _) = mh(trace, regen_random_subtree, (), subtree_involution)
         if iter % 2500 == 0
-            xs_model = evaluate_function(get_retval(trace), xs[1], 1., length(xs)+5)
+            func = get_retval(trace)
+            xs_model = evaluate_function(func, t0, x0, n+5)
             println(iter)
             println(trace[:tree])
             println(round_all(xs))
             println(round_all(xs_model))
             println("")
             if iter > 15000
-                gui(scatter!(fig,1:length(xs)+5, xs_model,
-                 c="red",alpha=0.25, label=nothing))
+                ts_plot = t0:t0+n+5
+                gui(scatter!(fig, ts_plot, xs_model,
+                    c="red",alpha=0.25, label=nothing))
             end
 
             #println(trace[:likelihood])
@@ -271,32 +276,37 @@ end
 
 # Initialize trace and extract variables.
 
-function initialize_trace(xs::Vector{Float64})
+function initialize_trace(t0::Integer, x0::Float64, xs::Vector{Float64})
     constraints = choicemap()
-    for (i, x) in enumerate(xs)
-        constraints[(:x,i)] = x
+    n = length(xs)
+    for t in 1:n
+        constraints[(:x, t0+t)] = xs[t]
     end
-    #constraints[:ys] = ys
-    (trace, _) = generate(model, (xs,), constraints)
+    model_args = (t0, x0, n)
+    (trace, _) = generate(model, model_args, constraints)
     return trace
 end
 
 
 
 
-ts = [1.,2.,3.,4.,5.,6.,7.,8.,9.,10.]
+# ts = [1.,2.,3.,4.,5.,6.,7.,8.,9.,10.]
 #xs = map(t -> t+t*sin(t*π/4), ts)
 #xs = map(t -> 1+ sin(pi*t/4), ts)
 #xs = map(t -> 1+t*sin(t/4),ts)
-xs = map(t -> t * ((mod(t,3)==1)),ts)
+# xs = map(t -> t * ((mod(t,3)==1)),ts)
 #xs = map(t -> t*2, ts)
 #xs = map(t -> 1.,ts)
 
+ts = 0:10
+xs = map(t -> 1+ sin(pi*t/4), ts)
 
-#xs = [25.,25.,25.,25.,25.,25.,25.]
-trace = initialize_trace(xs)
+t0 = ts[1]
+x0 = xs[1]
+xs_obs = xs[2:end]
 
-trace = run_mcmc(trace,xs, 1000000)
+trace = initialize_trace(t0, x0, xs_obs)
+trace = run_mcmc(trace, xs_obs, 1000000)
 
 # for i in 1:100
 #     pred = predict_new_data(model, trace, xs, [])
