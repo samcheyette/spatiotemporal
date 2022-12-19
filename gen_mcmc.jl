@@ -229,6 +229,59 @@ function initialize_trace(t0::Integer, x0::Float64, xs::Vector{Float64})
     return trace
 end
 
+# Run SMC with MCMC rejuvenation.
+function run_smc(
+        t0::Integer,
+        x0::Float64,
+        xs::Vector{Float64},
+        n_particles::Integer,
+        n_mcmc::Integer)
+
+    # Initialize the particles with no observations.
+    observations = choicemap()
+    state = initialize_particle_filter(
+                model,
+                (t0, x0, 0),
+                observations,
+                n_particles)
+
+    display(get_choices(state.traces[1]))
+
+    # Run SMC.
+    for t=1:length(xs)
+
+        # Create latest observation.
+        observation = choicemap()
+        observation[(:x, t0+t)] = xs[t]
+
+        # Run particle filter step on new observation.
+        Gen.particle_filter_step!(
+                state,
+                (t0, x0, t),
+                (NoChange(), NoChange(), UnknownChange()),
+                observation)
+
+        # Resample particles.
+        Gen.maybe_resample!(state, ess_threshold=n_particles/2)
+
+        # Apply MCMC rejuvenation to each particle.
+        Threads.@threads for i=1:n_particles
+            local trace = state.traces[i]
+            for iter=1:n_mcmc
+                println(iter)
+                trace, accepted = metropolis_hastings(
+                        trace,
+                        regen_random_subtree,
+                        (),
+                        subtree_involution)
+            end
+            state.traces[i] = trace
+        end
+    end
+
+    return state
+end
+
 ts = 0:10
 
 # xs = map(t -> t+t*sin(t*π/4), ts)
@@ -244,9 +297,12 @@ t0 = ts[1]
 x0 = Float64(xs[1])
 xs_obs = Vector{Float64}(xs[2:end])
 
-trace = initialize_trace(t0, x0, xs_obs)
-trace_dict = run_mcmc(trace, xs_obs, 1000000; visualize=true)
+# MCMC Experiment.
+# trace = initialize_trace(t0, x0, xs_obs)
+# trace_dict = run_mcmc(trace, xs_obs, 1000000; visualize=true)
+# df = DataFrame(trace_dict)
+# CSV.write("output/gen_mcmc_time.csv", df )
 
-df = DataFrame(trace_dict)
-
-CSV.write("output/gen_mcmc_time.csv", df )
+# SMC Experiment.
+state = run_smc(t0, x0, xs_obs, 6, 10)
+traces = state.traces
