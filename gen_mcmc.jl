@@ -98,7 +98,6 @@ end
 end
 
 @gen function model(t0::Integer, x0::Float64, n::Integer)
-    n = length(xs)
     func::Node = @trace(pcfg_prior(), :tree)
     noise = 0.1
     x = x0
